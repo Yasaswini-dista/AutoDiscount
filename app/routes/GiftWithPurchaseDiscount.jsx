@@ -1,16 +1,3 @@
-
-// Fetch customer segments from backend API route
-async function fetchCustomerSegments(shopDomain, search = "") {
-  const res = await fetch("/api.customerSegments", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ shopDomain, search })
-  });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || "Failed to fetch customer segments");
-  return json.segments;
-}
-
 import { useState } from "react";
 import * as Polaris from "@shopify/polaris";
 const {
@@ -31,17 +18,22 @@ const {
   Divider,
 } = Polaris;
 
-export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
+
+export default function GiftWithPurchaseDiscount({ onBack, initialStartTime, segments = [], error, shopDomain }) {
   // Form state
   const [discountMethod, setDiscountMethod] = useState("code"); // "code" or "automatic"
   const [discountCode, setDiscountCode] = useState("");
   const [minType, setMinType] = useState("amount");
+  // Default: amount is "" (zero rupees), quantity is 2 when selected
   const [amount, setAmount] = useState("");
   const [appliesTo, setAppliesTo] = useState("all");
   const [specificProducts, setSpecificProducts] = useState([]);
   const [specificCollections, setSpecificCollections] = useState([]);
   const [purchaseType, setPurchaseType] = useState("one-time");
   const [selectedGift, setSelectedGift] = useState(null);
+  // Recurring payments for subscriptions state
+  const [recurringOption, setRecurringOption] = useState('first'); // 'first', 'multiple', 'all'
+  const [recurringCount, setRecurringCount] = useState('1');
   // const app = useAppBridge();
   // const pickerRef = useRef(null);
 
@@ -50,7 +42,7 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
   const [showSegmentModal, setShowSegmentModal] = useState(false);
   const [segmentSearch, setSegmentSearch] = useState("");
   const [segmentLoading, setSegmentLoading] = useState(false);
-  const [segmentOptions, setSegmentOptions] = useState([]);
+  const [segmentOptions, setSegmentOptions] = useState(segments || []);
   const [combos, setCombos] = useState({ product: false, order: false, shipping: false });
   const [maxUses, setMaxUses] = useState(false);
   const [maxUsesPerCustomer, setMaxUsesPerCustomer] = useState(false);
@@ -108,13 +100,19 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                     <RadioButton
                       label="Minimum purchase amount"
                       checked={minType === "amount"}
-                      onChange={() => setMinType("amount")}
+                      onChange={() => {
+                        setMinType("amount");
+                        setAmount(""); // reset to empty string for rupees
+                      }}
                       name="minType"
                     />
                     <RadioButton
                       label="Minimum quantity of items"
                       checked={minType === "quantity"}
-                      onChange={() => setMinType("quantity")}
+                      onChange={() => {
+                        setMinType("quantity");
+                        setAmount(a => (a === "" || isNaN(Number(a)) || Number(a) < 1) ? "2" : a);
+                      }}
                       name="minType"
                     />
                   </BlockStack>
@@ -131,8 +129,17 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                     <TextField
                       label="Quantity"
                       value={amount}
-                      onChange={setAmount}
+                      onChange={val => {
+                        // Only allow numbers >= 1, default to 2 if empty
+                        const num = parseInt(val, 10);
+                        if (isNaN(num) || num < 1) {
+                          setAmount("2");
+                        } else {
+                          setAmount(String(num));
+                        }
+                      }}
                       type="number"
+                      min={1}
                     />
                   )}
                   <InlineStack gap="300" wrap>
@@ -184,7 +191,12 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                                 return;
                               }
                               try {
-                                const selected = await window.shopify.resourcePicker({ type: 'product', multiple: true });
+                                const selected = await window.shopify.resourcePicker({
+                                  type: 'product',
+                                  multiple: true,
+                                  title: 'Select product',
+                                  selectButtonText: 'Select'
+                                });
                                 if (selected && selected.length > 0) {
                                   setSpecificProducts(selected);
                                 }
@@ -193,7 +205,7 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                               }
                             }}
                           >
-                            Browse products
+                            Select product
                           </Button>
                         </Box>
                       </Box>
@@ -222,7 +234,12 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                                 return;
                               }
                               try {
-                                const selected = await window.shopify.resourcePicker({ type: 'collection', multiple: true });
+                                const selected = await window.shopify.resourcePicker({
+                                  type: 'collection',
+                                  multiple: true,
+                                  title: 'Select collection',
+                                  selectButtonText: 'Select'
+                                });
                                 if (selected && selected.length > 0) {
                                   setSpecificCollections(selected);
                                 }
@@ -231,7 +248,7 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                               }
                             }}
                           >
-                            Browse collections
+                            Select collection
                           </Button>
                         </Box>
                       </Box>
@@ -258,7 +275,12 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                             return;
                           }
                           try {
-                            const selected = await window.shopify.resourcePicker({ type: 'product', multiple: false });
+                            const selected = await window.shopify.resourcePicker({
+                              type: 'product',
+                              multiple: false,
+                              title: 'Select product',
+                              selectButtonText: 'Select'
+                            });
                             if (selected && selected.length > 0) {
                               setSelectedGift(selected[0]);
                             }
@@ -304,76 +326,78 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                         />
                         <Box minWidth="100px" marginBlockStart="5">
                           <Button
-                            onClick={async () => {
-                              setShowSegmentModal(true);
-                              setSegmentLoading(true);
-                              try {
-                                // You must provide a valid shopDomain from your app/session
-                                const shopDomain = window.shopifyShopDomain || "";
-                                const segments = await fetchCustomerSegments(shopDomain, "");
-                                setSegmentOptions(segments);
-                              } catch (e) {
-                                setSegmentOptions([]);
-                              }
-                              setSegmentLoading(false);
-                            }}
+                            onClick={() => setShowSegmentModal(true)}
                           >
                             Browse
                           </Button>
                         </Box>
                       </Box>
+                      {/* Modal for segment selection - new UI */}
+                      <Polaris.Modal
+                        open={showSegmentModal}
+                        onClose={() => setShowSegmentModal(false)}
+                        title="Add customer segments"
+                        footerActionAlignment="right"
+                        primaryAction={{
+                          content: "Add",
+                          onAction: () => setShowSegmentModal(false),
+                        }}
+                        secondaryActions={[
+                          { content: "Close", onAction: () => setShowSegmentModal(false) }
+                        ]}
+                      >
+                        <BlockStack gap="200">
+                          <Box paddingBlockEnd="200">
+                            <Text as="span" color="subdued">
+                              You can create a new segment from the{' '}
+                              <a
+                                href={shopDomain ? `https://admin.shopify.com/store/${shopDomain.replace(/\.myshopify\.com$/, '')}/customers/segments` : 'https://admin.shopify.com/customers/segments'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#005BD3', textDecoration: 'underline' }}
+                              >
+                                Segments Page
+                              </a>
+                            </Text>
+                          </Box>
+                          <Box paddingBlockEnd="200">
+                            <TextField
+                              label=""
+                              value={segmentSearch}
+                              onChange={val => setSegmentSearch(val)}
+                              placeholder="Search customer segments"
+                              autoComplete="off"
+                              fullWidth
+                              prefix={<Icon source="SearchMinor" color="subdued" />}
+                              style={{ background: '#fff', borderRadius: 6 }}
+                            />
+                          </Box>
+                          <Box style={{ maxHeight: 250, overflowY: 'auto', background: '#fff', borderRadius: 8, padding: '8px 0' }}>
+                            {segmentOptions.length === 0 ? (
+                              <Text color="subdued" padding="200">No segments found.</Text>
+                            ) : (
+                              segmentOptions
+                                .filter(seg => seg.title.toLowerCase().includes(segmentSearch.toLowerCase()))
+                                .map(seg => (
+                                  <Box key={seg.id} display="flex" alignItems="center" paddingBlock="100" paddingInline="400" borderRadius="100" style={{ marginBottom: 4 }}>
+                                    <Checkbox
+                                      label={seg.title}
+                                      checked={selectedSegments.some(s => s.id === seg.id)}
+                                      onChange={() => {
+                                        setSelectedSegments(sel => sel.some(s => s.id === seg.id)
+                                          ? sel.filter(s => s.id !== seg.id)
+                                          : [...sel, seg]);
+                                      }}
+                                    />
+                                  </Box>
+                                ))
+                            )}
+                          </Box>
+                        </BlockStack>
+                      </Polaris.Modal>
                     </Box>
                   )}
                   {/* Customer segment browse modal (realtime) */}
-                  {showSegmentModal && (
-                    <Polaris.Modal
-                      open={showSegmentModal}
-                      onClose={() => setShowSegmentModal(false)}
-                      title="Browse customer segments"
-                      primaryAction={{ content: 'Select', onAction: () => setShowSegmentModal(false) }}
-                      secondaryActions={[{ content: 'Cancel', onAction: () => setShowSegmentModal(false) }]}
-                    >
-                      <BlockStack gap="200">
-                        <TextField
-                          label="Search segments"
-                          value={segmentSearch}
-                          onChange={async (val) => {
-                            setSegmentSearch(val);
-                            setSegmentLoading(true);
-                            try {
-                              // You must provide a valid shopDomain from your app/session
-                              const shopDomain = window.shopifyShopDomain || "";
-                              const segments = await fetchCustomerSegments(shopDomain, val);
-                              setSegmentOptions(segments);
-                            } catch (e) {
-                              setSegmentOptions([]);
-                            }
-                            setSegmentLoading(false);
-                          }}
-                          placeholder="Search segments"
-                          autoComplete="off"
-                          fullWidth
-                        />
-                        {segmentLoading ? (
-                          <Text>Loading...</Text>
-                        ) : (
-                          <Box style={{ maxHeight: 200, overflowY: 'auto' }}>
-                            {segmentOptions.length === 0 ? (
-                              <Text color="subdued">No segments found.</Text>
-                            ) : (
-                              segmentOptions.map(seg => (
-                                <Box key={seg.id} padding="200" background={selectedSegments.some(s => s.id === seg.id) ? 'bg-fill-tertiary' : undefined} borderRadius="200" onClick={() => {
-                                  setSelectedSegments(sel => sel.some(s => s.id === seg.id) ? sel.filter(s => s.id !== seg.id) : [...sel, seg]);
-                                }} style={{ cursor: 'pointer', marginBottom: 4 }}>
-                                  <Text>{seg.title}</Text>
-                                </Box>
-                              ))
-                            )}
-                          </Box>
-                        )}
-                      </BlockStack>
-                    </Polaris.Modal>
-                  )}
                 </BlockStack>
               </Card>
               <Card sectioned>
@@ -433,6 +457,53 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                     checked={maxUsesPerCustomer}
                     onChange={setMaxUsesPerCustomer}
                   />
+                  {/* Recurring payments for subscriptions */}
+                  {purchaseType === 'subscription' && (
+                    <>
+                      <Divider />
+                      <Text variant="headingMd">Recurring payments for subscriptions</Text>
+                      <BlockStack gap="100">
+                        <RadioButton
+                          label="Limit discount to first payment"
+                          checked={recurringOption === 'first'}
+                          onChange={() => setRecurringOption('first')}
+                          name="recurringOption"
+                        />
+                        <RadioButton
+                          label="Limit discount to multiple recurring payments"
+                          checked={recurringOption === 'multiple'}
+                          onChange={() => setRecurringOption('multiple')}
+                          name="recurringOption"
+                        />
+                        {recurringOption === 'multiple' && (
+                          <Box paddingInlineStart="6">
+                            <TextField
+                              label=""
+                              value={recurringCount}
+                              onChange={val => {
+                                const num = parseInt(val, 10);
+                                if (isNaN(num) || num < 1) {
+                                  setRecurringCount('1');
+                                } else {
+                                  setRecurringCount(String(num));
+                                }
+                              }}
+                              type="number"
+                              min={1}
+                              style={{ maxWidth: 80 }}
+                            />
+                            <Text color="subdued" variant="bodySm">Includes payment on first order.</Text>
+                          </Box>
+                        )}
+                        <RadioButton
+                          label="Discount applies to all recurring payments"
+                          checked={recurringOption === 'all'}
+                          onChange={() => setRecurringOption('all')}
+                          name="recurringOption"
+                        />
+                      </BlockStack>
+                    </>
+                  )}
                 </BlockStack>
               </Card>
               <Card sectioned>
@@ -513,7 +584,15 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime }) {
                       <li>Spend ₹{amount || '0.00'}, get 1 item free</li>
                       <li>For all customers</li>
                       <li>No usage limits</li>
-                      <li>Applies to {purchaseType === 'one-time' ? 'one-time purchases' : purchaseType === 'subscription' ? 'subscriptions' : 'one-time & subscriptions'}</li>
+                      {(purchaseType === 'subscription' || purchaseType === 'both') && (
+                        <>
+                          <li>Applies to subscriptions{purchaseType === 'both' ? ' and one-time purchases' : ''}</li>
+                          {recurringOption === 'first' && <li>For 1 recurring payment</li>}
+                          {recurringOption === 'multiple' && <li>For {recurringCount} recurring payment{recurringCount === '1' ? '' : 's'}</li>}
+                          {recurringOption === 'all' && <li>For all recurring payments</li>}
+                        </>
+                      )}
+                      {purchaseType === 'one-time' && <li>Applies to one-time purchases</li>}
                       <li>Active from today</li>
                     </ul>
                   </BlockStack>

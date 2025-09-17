@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { json } from "@remix-run/node";
 // import { useLoaderData } from "@remix-run/react";
 import * as Polaris from "@shopify/polaris";
 import { DeleteIcon } from '@shopify/polaris-icons';
-import shopify from "../shopify.server";
 
 
 // Loader removed; segments and error are now passed as props from parent route
@@ -24,7 +22,7 @@ const {
   Divider,
 } = Polaris;
 
-export default function MultiValueDiscount({ onBack, initialStartTime, segments = [], error }) {
+export default function MultiValueDiscount({ onBack, initialStartTime, segments = [], error, shopDomain }) {
   if (error) {
     return (
       <Polaris.Card>
@@ -55,6 +53,9 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
   const [discountMethod, setDiscountMethod] = useState("code");
   const [discountCode, setDiscountCode] = useState("");
   const [appliesTo, setAppliesTo] = useState("specific_collections");
+  // Recurring payments for subscriptions state
+  const [recurringOption, setRecurringOption] = useState('first'); // 'first', 'multiple', 'all'
+  const [recurringCount, setRecurringCount] = useState('1');
   const [showChangeModal, setShowChangeModal] = useState(false);
   const [pendingAppliesTo, setPendingAppliesTo] = useState(null);
   const [purchaseType, setPurchaseType] = useState("one-time");
@@ -276,6 +277,53 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
                       />
                     </div>
                   </InlineStack>
+                  {/* Recurring payments for subscriptions */}
+                  {(purchaseType === 'subscription' || purchaseType === 'both') && (
+                    <>
+                      <Divider />
+                      <Text variant="headingMd">Recurring payments for subscriptions</Text>
+                      <BlockStack gap="100">
+                        <RadioButton
+                          label="Limit discount to first payment"
+                          checked={recurringOption === 'first'}
+                          onChange={() => setRecurringOption('first')}
+                          name="recurringOption"
+                        />
+                        <RadioButton
+                          label="Limit discount to multiple recurring payments"
+                          checked={recurringOption === 'multiple'}
+                          onChange={() => setRecurringOption('multiple')}
+                          name="recurringOption"
+                        />
+                        {recurringOption === 'multiple' && (
+                          <Box paddingInlineStart="6">
+                            <TextField
+                              label=""
+                              value={recurringCount}
+                              onChange={val => {
+                                const num = parseInt(val, 10);
+                                if (isNaN(num) || num < 1) {
+                                  setRecurringCount('1');
+                                } else {
+                                  setRecurringCount(String(num));
+                                }
+                              }}
+                              type="number"
+                              min={1}
+                              style={{ maxWidth: 80 }}
+                            />
+                            <Text color="subdued" variant="bodySm">Includes payment on first order.</Text>
+                          </Box>
+                        )}
+                        <RadioButton
+                          label="Discount applies to all recurring payments"
+                          checked={recurringOption === 'all'}
+                          onChange={() => setRecurringOption('all')}
+                          name="recurringOption"
+                        />
+                      </BlockStack>
+                    </>
+                  )}
                   {appliesTo === "specific_collections" ? (
                     <Text color="subdued">Specific collections are recommended for selecting a large number of products.</Text>
                   ) : (
@@ -290,57 +338,63 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
                   <Text color="subdued">Add multiple discount values for different collections.</Text>
                   {discountValues.map((d, idx) => (
                     <Box key={d.id} background="bg-surface-secondary" borderColor="border" borderWidth="025" borderRadius="300" padding="400" marginBlockEnd="4" position="relative">
-                      {/* Delete icon absolutely positioned in top-right */}
-                      {discountValues.length > 1 && (
-                        <Button
-                          icon={<Icon source={DeleteIcon} color="critical" />}
-                          onClick={() => handleRemoveDiscount(idx)}
-                          plain
-                          accessibilityLabel="Delete discount"
-                          style={{ position: 'absolute', top: 12, right: 12, zIndex: 2 }}
-                        />
-                      )}
                       <BlockStack gap="300">
-                        <Text variant="headingSm" fontWeight="bold">Discount {idx + 1}</Text>
-                        <InlineStack gap="200">
-                          <Select
-                            label="Discount value"
-                            options={[
-                              { label: "Percentage", value: "percentage" },
-                              { label: "Fixed amount", value: "fixed" },
-                            ]}
-                            value={d.type}
-                            onChange={val => handleDiscountValueChange(idx, "type", val)}
-                            style={{ minWidth: 180 }}
-                          />
-                          <TextField
-                            label=" "
-                            value={d.value}
-                            onChange={val => handleDiscountValueChange(idx, "value", val)}
-                            type="number"
-                            suffix={d.type === "percentage" ? "%" : "₹"}
-                            placeholder="0"
-                            style={{ minWidth: 120 }}
-                          />
-                        </InlineStack>
-                        <Box marginBlockStart="2">
-                          <Text variant="bodyMd" color="subdued">Applies to specific collections</Text>
+                        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <Text variant="headingSm" fontWeight="bold">Discount {idx + 1}</Text>
+                          {discountValues.length > 1 && (
+                            <Button
+                              icon={<Icon source={DeleteIcon} color="critical" />}
+                              onClick={() => handleRemoveDiscount(idx)}
+                              plain
+                              accessibilityLabel="Delete discount"
+                            />
+                          )}
                         </Box>
-                        <InlineStack gap="200">
+                        <Box style={{ display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <Select
+                              label="Discount value"
+                              options={[
+                                { label: "Percentage", value: "percentage" },
+                                { label: "Fixed amount", value: "fixed" },
+                              ]}
+                              value={d.type}
+                              onChange={val => handleDiscountValueChange(idx, "type", val)}
+                            />
+                          </div>
+                          <div style={{ width: 140, minWidth: 100 }}>
+                            <TextField
+                              label=""
+                              value={d.value}
+                              onChange={val => handleDiscountValueChange(idx, "value", val)}
+                              type="number"
+                              suffix={d.type === "percentage" ? "%" : "₹"}
+                              placeholder="0"
+                            />
+                          </div>
+                        </Box>
+                        {/* Removed duplicate label for applies to specific collections/products */}
+                        <Box display="flex" alignItems="center" gap="200">
                           <TextField
-                            label="Applies to specific collections"
-                            value={d.collections && d.collections.length > 0 ? d.collections.map(c => c.title).join(", ") : ""}
-                            placeholder="Search collections"
+                            label={appliesTo === 'specific_collections' ? 'Applies to specific collections' : 'Applies to specific products'}
+                            value={
+                              appliesTo === 'specific_collections'
+                                ? (d.collections && d.collections.length > 0 ? d.collections.map(c => c.title).join(", ") : "")
+                                : (d.productVariants && d.productVariants.length > 0 ? d.productVariants.map(p => p.title).join(", ") : "")
+                            }
+                            placeholder={appliesTo === 'specific_collections' ? 'Search collections' : 'Search products'}
                             autoComplete="off"
                             readOnly
                             fullWidth
-                            prefix={<Icon source="SearchMinor" color="subdued" />} // mimic Shopify admin
+                            prefix={<Icon source="SearchMinor" color="subdued" />}
                             variant="outlined"
                           />
-                          <Button onClick={() => handleBrowse(idx)}>
-                            Browse
-                          </Button>
-                        </InlineStack>
+                          <Box minWidth="100px" marginBlockStart="5">
+                            <Button onClick={() => handleBrowse(idx)}>
+                              Browse
+                            </Button>
+                          </Box>
+                        </Box>
                       </BlockStack>
                     </Box>
                   ))}
@@ -398,62 +452,76 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
                         />
                         <Box minWidth="100px" marginBlockStart="5">
                           <Button
-                            onClick={() => {
-                              setShowSegmentModal(true);
-                              setSegmentOptions(segments || []);
-                            }}
+                            onClick={() => setShowSegmentModal(true)}
                           >
                             Browse
                           </Button>
                         </Box>
                       </Box>
-                    </Box>
-                  )}
-                  {/* Customer segment browse modal (realtime) */}
-                  {showSegmentModal && (
-                    <Polaris.Modal
-                      open={showSegmentModal}
-                      onClose={() => setShowSegmentModal(false)}
-                      title="Browse customer segments"
-                      primaryAction={{ content: 'Select', onAction: () => setShowSegmentModal(false) }}
-                      secondaryActions={[{ content: 'Cancel', onAction: () => setShowSegmentModal(false) }]}
-                    >
-                      <BlockStack gap="200">
-                        <TextField
-                          label="Search segments"
-                          value={segmentSearch}
-                          onChange={(val) => {
-                            setSegmentSearch(val);
-                            // Simple client-side filter for demo; for real search, implement in loader
-                            if (!val) {
-                              setSegmentOptions(segments || []);
-                            } else {
-                              setSegmentOptions((segments || []).filter(seg => seg.title.toLowerCase().includes(val.toLowerCase())));
-                            }
-                          }}
-                          placeholder="Search segments"
-                          autoComplete="off"
-                          fullWidth
-                        />
-                        {segmentLoading ? (
-                          <Text>Loading...</Text>
-                        ) : (
-                          <Box style={{ maxHeight: 200, overflowY: 'auto' }}>
+                      {/* Modal for segment selection - Shopify admin style */}
+                      <Polaris.Modal
+                        open={showSegmentModal}
+                        onClose={() => setShowSegmentModal(false)}
+                        title="Add customer segments"
+                        footerActionAlignment="right"
+                        primaryAction={{
+                          content: "Add",
+                          onAction: () => setShowSegmentModal(false),
+                        }}
+                        secondaryActions={[
+                          { content: "Close", onAction: () => setShowSegmentModal(false) }
+                        ]}
+                      >
+                        <BlockStack gap="200">
+                          <Box paddingBlockEnd="200">
+                            <Text as="span" color="subdued">
+                              You can create a new segment from the{' '}
+                              <a
+                                href={shopDomain ? `https://admin.shopify.com/store/${shopDomain.replace(/\.myshopify\.com$/, '')}/customers/segments` : 'https://admin.shopify.com/customers/segments'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#005BD3', textDecoration: 'underline' }}
+                              >
+                                Segments Page
+                              </a>
+                            </Text>
+                          </Box>
+                          <Box paddingBlockEnd="200">
+                            <TextField
+                              label=""
+                              value={segmentSearch}
+                              onChange={val => setSegmentSearch(val)}
+                              placeholder="Search customer segments"
+                              autoComplete="off"
+                              fullWidth
+                              prefix={<Icon source="SearchMinor" color="subdued" />}
+                              style={{ background: '#fff', borderRadius: 6 }}
+                            />
+                          </Box>
+                          <Box style={{ maxHeight: 250, overflowY: 'auto', background: '#fff', borderRadius: 8, padding: '8px 0' }}>
                             {segmentOptions.length === 0 ? (
-                              <Text color="subdued">No segments found.</Text>
+                              <Text color="subdued" padding="200">No segments found.</Text>
                             ) : (
-                              segmentOptions.map(seg => (
-                                <Box key={seg.id} padding="200" background={selectedSegments.some(s => s.id === seg.id) ? 'bg-fill-tertiary' : undefined} borderRadius="200" onClick={() => {
-                                  setSelectedSegments(sel => sel.some(s => s.id === seg.id) ? sel.filter(s => s.id !== seg.id) : [...sel, seg]);
-                                }} style={{ cursor: 'pointer', marginBottom: 4 }}>
-                                  <Text>{seg.title}</Text>
-                                </Box>
-                              ))
+                              segmentOptions
+                                .filter(seg => seg.title.toLowerCase().includes(segmentSearch.toLowerCase()))
+                                .map(seg => (
+                                  <Box key={seg.id} display="flex" alignItems="center" paddingBlock="100" paddingInline="400" borderRadius="100" style={{ marginBottom: 4 }}>
+                                    <Checkbox
+                                      label={seg.title}
+                                      checked={selectedSegments.some(s => s.id === seg.id)}
+                                      onChange={() => {
+                                        setSelectedSegments(sel => sel.some(s => s.id === seg.id)
+                                          ? sel.filter(s => s.id !== seg.id)
+                                          : [...sel, seg]);
+                                      }}
+                                    />
+                                  </Box>
+                                ))
                             )}
                           </Box>
-                        )}
-                      </BlockStack>
-                    </Polaris.Modal>
+                        </BlockStack>
+                      </Polaris.Modal>
+                    </Box>
                   )}
                 </BlockStack>
               </Card>
@@ -577,7 +645,15 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
                       <li>For Online Store</li>
                       <li>For all customers</li>
                       <li>No usage limits</li>
-                      <li>Applies to one-time purchases</li>
+                      {(purchaseType === 'subscription' || purchaseType === 'both') && (
+                        <>
+                          <li>Applies to subscriptions{purchaseType === 'both' ? ' and one-time purchases' : ''}</li>
+                          {recurringOption === 'first' && <li>For 1 recurring payment</li>}
+                          {recurringOption === 'multiple' && <li>For {recurringCount} recurring payment{recurringCount === '1' ? '' : 's'}</li>}
+                          {recurringOption === 'all' && <li>For all recurring payments</li>}
+                        </>
+                      )}
+                      {purchaseType === 'one-time' && <li>Applies to one-time purchases</li>}
                       <li>Active from today</li>
                     </ul>
                   </BlockStack>

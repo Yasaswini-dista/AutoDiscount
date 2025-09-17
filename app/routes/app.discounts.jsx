@@ -1,59 +1,12 @@
 import { useState } from "react";
-import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
-import shopify from "../shopify.server";
-// Loader to fetch customer segments from Shopify Admin API (server-side)
-export const loader = async ({ request }) => {
-  const { session } = await shopify.authenticate.admin(request);
-  const { shop } = session;
-  const accessToken = session?.accessToken;
-  const SEGMENTS_QUERY = `
-    query {
-      segments(first: 50) {
-        edges {
-          node {
-            id
-            name
-            query
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
-  `;
-  let segments = [];
-  let error = null;
-  try {
-    const endpoint = `https://${shop}/admin/api/2025-07/graphql.json`;
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': accessToken,
-      },
-      body: JSON.stringify({ query: SEGMENTS_QUERY }),
-    });
-    const data = await response.json();
-    if (data.errors) {
-      error = data.errors[0].message;
-    } else {
-      segments = data.data.segments.edges.map(edge => ({
-        id: edge.node.id,
-        title: edge.node.name,
-        query: edge.node.query,
-      }));
-    }
-  } catch (err) {
-    error = err.message;
-  }
-  return json({ segments, error });
-};
 import * as Polaris from "@shopify/polaris";
 import GiftWithPurchaseDiscount from "./GiftWithPurchaseDiscount";
 import MultiValueDiscount from "./MultiValueDiscount";
+// you can add these pages later if needed
+// import VolumeDiscount from "./VolumeDiscount";
+// import TierDiscount from "./TierDiscount";
+
 import { 
   GiftCardIcon, 
   DiscountIcon, 
@@ -68,115 +21,216 @@ const {
   Button,
   Modal,
   TextContainer,
-  InlineStack,
   BlockStack,
   Box,
   Text,
   Icon,
 } = Polaris;
 
+// Loader to fetch customer segments from Shopify Admin API
+export const loader = async ({ request }) => {
+  const { json } = await import("@remix-run/node");
+  const shopify = (await import("../shopify.server")).default;
+  const { session } = await shopify.authenticate.admin(request);
+  const { shop } = session;
+  const accessToken = session?.accessToken;
+
+  const SEGMENTS_QUERY = `
+    query {
+      segments(first: 20) {
+        edges {
+          node {
+            id
+            name
+            query
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const endpoint = `https://${shop}/admin/api/2025-07/graphql.json`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
+      },
+      body: JSON.stringify({ query: SEGMENTS_QUERY }),
+    });
+
+    const data = await response.json();
+
+    if (data.errors) {
+      return json({ segments: [], error: data.errors[0].message, shop });
+    }
+
+    const segments = data.data.segments.edges.map((edge) => ({
+      id: edge.node.id,
+      title: edge.node.name,
+      query: edge.node.query,
+    }));
+
+    return json({ segments, error: null, shop });
+  } catch (err) {
+    return json({ segments: [], error: err.message, shop });
+  }
+};
+
 export default function DiscountsPage() {
-  const { segments = [], error } = useLoaderData();
+  const { segments = [], error, shop } = useLoaderData();
+
   const [active, setActive] = useState(false);
+  const [selectedPage, setSelectedPage] = useState(null); // track which subpage is open
+  const [initialStartTime, setInitialStartTime] = useState("");
 
-
-  // New state to show the GiftWithPurchaseDiscount or MultiValueDiscount UI
-  const [showGiftWithPurchase, setShowGiftWithPurchase] = useState(false);
-  const [showMultiValueDiscount, setShowMultiValueDiscount] = useState(false);
   const toggleModal = () => setActive(!active);
 
-  // Handler for Gift with purchase button
-  const [initialStartTime, setInitialStartTime] = useState("");
+  // when user selects "Gift with purchase"
   const handleGiftWithPurchaseClick = () => {
-    // Get current time in HH:MM format (24h, pad with 0)
     const now = new Date();
-    const pad = n => n.toString().padStart(2, '0');
+    const pad = (n) => n.toString().padStart(2, "0");
     const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
     setInitialStartTime(timeStr);
-    setShowGiftWithPurchase(true);
+    setSelectedPage("gift");
+    setActive(false);
   };
 
-  // Handler for Multi-value discount button
+  // when user selects "Multi-value discount"
   const handleMultiValueDiscountClick = () => {
-    setShowMultiValueDiscount(true);
+    setSelectedPage("multi");
+    setActive(false);
   };
 
-  return (
-    <>
-      {showGiftWithPurchase ? (
-        <GiftWithPurchaseDiscount onBack={() => setShowGiftWithPurchase(false)} initialStartTime={initialStartTime} segments={segments} error={error} />
-      ) : showMultiValueDiscount ? (
-        <MultiValueDiscount onBack={() => setShowMultiValueDiscount(false)} initialStartTime={initialStartTime} segments={segments} error={error} />
-      ) : (
-        <Page title="Discount Functions">
-          <Layout>
-            <Layout.Section>
-              <Card sectioned>
-                <BlockStack alignment="center" spacing="loose">
-                  <Box>
-                    <Text variant="headingMd" as="h2">
-                      Create your first discount function
-                    </Text>
-                    <Text as="p">
-                      Build custom discount logic with powerful functions.
-                    </Text>
-                  </Box>
-                  <Button primary onClick={toggleModal}>
-                    Create discount function
-                  </Button>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          </Layout>
+  // you can add similar handlers for volume and tier
+  const handleVolumeClick = () => {
+    setSelectedPage("volume");
+    setActive(false);
+  };
 
-          <Modal
-            open={active}
-            onClose={toggleModal}
-            title="Create discount function"
-            primaryAction={{
-              content: "Cancel",
-              onAction: toggleModal,
-            }}
-          >
-            <Modal.Section>
-              <TextContainer>
-                <BlockStack spacing="loose">
-                  <Button
-                    plain
-                    fullWidth
-                    icon={<Icon source={GiftCardIcon} />}
-                    onClick={handleGiftWithPurchaseClick}
-                  >
-                    Gift with purchase — Automatically add free gift to cart
-                  </Button>
-                  <Button
-                    plain
-                    fullWidth
-                    icon={<Icon source={DiscountIcon} />}
-                    onClick={handleMultiValueDiscountClick}
-                  >
-                    Multi-value discount — Multiple discount values for products/collections
-                  </Button>
-                  <Button
-                    plain
-                    fullWidth
-                    icon={<Icon source={OrderIcon} />}
-                  >
-                    Volume discount — Increase discount with quantity/amount
-                  </Button>
-                  <Button
-                    plain
-                    fullWidth
-                    icon={<Icon source={ProductIcon} />}
-                  >
-                    Multi-class tier discount — Stack product/order/gift/shipping tiers
-                  </Button>
-                </BlockStack>
-              </TextContainer>
-            </Modal.Section>
-          </Modal>
-        </Page>
-      )}
-    </>
+  const handleTierClick = () => {
+    setSelectedPage("tier");
+    setActive(false);
+  };
+
+  // ----------------------------
+  // RENDER SUB-PAGE IF SELECTED
+  // ----------------------------
+  if (selectedPage === "gift") {
+    return (
+      <GiftWithPurchaseDiscount
+        onBack={() => setSelectedPage(null)}
+        initialStartTime={initialStartTime}
+        segments={segments}
+        error={error}
+        shopDomain={shop}
+      />
+    );
+  }
+
+  if (selectedPage === "multi") {
+    return (
+      <MultiValueDiscount
+        onBack={() => setSelectedPage(null)}
+        segments={segments}
+        error={error}
+        shopDomain={shop}
+      />
+    );
+  }
+
+  // Later you can replace alerts with <VolumeDiscount /> and <TierDiscount />
+  if (selectedPage === "volume") {
+    return (
+      <Page title="Volume Discount">
+        <Text>Volume discount page (segments available)</Text>
+      </Page>
+    );
+  }
+
+  if (selectedPage === "tier") {
+    return (
+      <Page title="Multi-class Tier Discount">
+        <Text>Tier discount page (segments available)</Text>
+      </Page>
+    );
+  }
+
+  // ----------------------------
+  // DEFAULT MAIN PAGE
+  // ----------------------------
+  return (
+    <Page title="Discount Functions">
+      <Layout>
+        <Layout.Section>
+          <Card sectioned>
+            <BlockStack alignment="center" spacing="loose">
+              <Box>
+                <Text variant="headingMd" as="h2">
+                  Create your first discount function
+                </Text>
+                <Text as="p">
+                  Build custom discount logic with powerful functions.
+                </Text>
+              </Box>
+              <Button primary onClick={toggleModal}>
+                Create discount function
+              </Button>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+
+      <Modal
+        open={active}
+        onClose={toggleModal}
+        title="Create discount function"
+        primaryAction={{
+          content: "Cancel",
+          onAction: toggleModal,
+        }}
+      >
+        <Modal.Section>
+          <TextContainer>
+            <BlockStack spacing="loose">
+              <Button
+                plain
+                fullWidth
+                icon={<Icon source={GiftCardIcon} />}
+                onClick={handleGiftWithPurchaseClick}
+              >
+                Gift with purchase — Automatically add free gift to cart
+              </Button>
+              <Button
+                plain
+                fullWidth
+                icon={<Icon source={DiscountIcon} />}
+                onClick={handleMultiValueDiscountClick}
+              >
+                Multi-value discount — Multiple discount values
+              </Button>
+              <Button
+                plain
+                fullWidth
+                icon={<Icon source={OrderIcon} />}
+                onClick={handleVolumeClick}
+              >
+                Volume discount — Increase discount with quantity/amount
+              </Button>
+              <Button
+                plain
+                fullWidth
+                icon={<Icon source={ProductIcon} />}
+                onClick={handleTierClick}
+              >
+                Multi-class tier discount — Stack product/order/gift/shipping
+                tiers
+              </Button>
+            </BlockStack>
+          </TextContainer>
+        </Modal.Section>
+      </Modal>
+    </Page>
   );
 }
