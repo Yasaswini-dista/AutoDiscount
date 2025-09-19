@@ -3,9 +3,8 @@ import { useLoaderData } from "@remix-run/react";
 import * as Polaris from "@shopify/polaris";
 import GiftWithPurchaseDiscount from "./GiftWithPurchaseDiscount";
 import MultiValueDiscount from "./MultiValueDiscount";
-// you can add these pages later if needed
-// import VolumeDiscount from "./VolumeDiscount";
-// import TierDiscount from "./TierDiscount";
+import VolumeDiscount from "./VolumeDiscount";
+import TierDiscount from "./TierDiscount";
 
 import { 
   GiftCardIcon, 
@@ -35,7 +34,7 @@ export const loader = async ({ request }) => {
   const { shop } = session;
   const accessToken = session?.accessToken;
 
-  const SEGMENTS_QUERY = `
+  const SEGMENTS_AND_COUNTRIES_QUERY = `
     query {
       segments(first: 20) {
         edges {
@@ -44,6 +43,12 @@ export const loader = async ({ request }) => {
             name
             query
           }
+        }
+      }
+      __type(name: "CountryCode") {
+        enumValues {
+          name
+          description
         }
       }
     }
@@ -57,13 +62,13 @@ export const loader = async ({ request }) => {
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": accessToken,
       },
-      body: JSON.stringify({ query: SEGMENTS_QUERY }),
+      body: JSON.stringify({ query: SEGMENTS_AND_COUNTRIES_QUERY }),
     });
 
     const data = await response.json();
 
     if (data.errors) {
-      return json({ segments: [], error: data.errors[0].message, shop });
+      return json({ segments: [], countries: [], error: data.errors[0].message, shop });
     }
 
     const segments = data.data.segments.edges.map((edge) => ({
@@ -72,14 +77,20 @@ export const loader = async ({ request }) => {
       query: edge.node.query,
     }));
 
-    return json({ segments, error: null, shop });
+    // Build country list from enumValues
+    const countries = (data.data.__type?.enumValues || []).map((c) => ({
+      code: c.name,
+      name: c.description || c.name,
+    }));
+
+    return json({ segments, countries, error: null, shop });
   } catch (err) {
-    return json({ segments: [], error: err.message, shop });
+    return json({ segments: [], countries: [], error: err.message, shop });
   }
 };
 
 export default function DiscountsPage() {
-  const { segments = [], error, shop } = useLoaderData();
+  const { segments = [], countries = [], error, shop } = useLoaderData();
 
   const [active, setActive] = useState(false);
   const [selectedPage, setSelectedPage] = useState(null); // track which subpage is open
@@ -143,17 +154,26 @@ export default function DiscountsPage() {
   // Later you can replace alerts with <VolumeDiscount /> and <TierDiscount />
   if (selectedPage === "volume") {
     return (
-      <Page title="Volume Discount">
-        <Text>Volume discount page (segments available)</Text>
-      </Page>
+      <VolumeDiscount
+        onBack={() => setSelectedPage(null)}
+        initialStartTime={initialStartTime}
+        segments={segments}
+        error={error}
+        shopDomain={shop}
+      />
     );
   }
 
   if (selectedPage === "tier") {
     return (
-      <Page title="Multi-class Tier Discount">
-        <Text>Tier discount page (segments available)</Text>
-      </Page>
+      <TierDiscount
+        onBack={() => setSelectedPage(null)}
+        initialStartTime={initialStartTime}
+        segments={segments}
+        error={error}
+        shopDomain={shop}
+        countries={countries}
+      />
     );
   }
 
