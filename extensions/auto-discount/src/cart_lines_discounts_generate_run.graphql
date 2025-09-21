@@ -1,0 +1,20 @@
+query CartInput {
+  cart {
+    lines {
+      id
+      quantity
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+    metafield(namespace: "function-configuration", key: "config") {
+      value
+      type
+    }
+  }
+}

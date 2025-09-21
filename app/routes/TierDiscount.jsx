@@ -2,6 +2,8 @@ import { useState } from "react";
 import * as Polaris from "@shopify/polaris";
 import * as Flags from 'country-flag-icons/react/3x2';
 
+
+import { useFetcher } from "@remix-run/react";
 const {
   Page,
   Layout,
@@ -35,7 +37,41 @@ function getDefaultStartTime12() {
   return `${h}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
-export default function TierDiscount({ onBack, initialStartTime, segments = [], error, shopDomain, countries = [] }) {
+export default function TierDiscount({ onBack, initialStartTime, segments = [], error, shopDomain, countries = [], parentAction }) {
+  const fetcher = useFetcher();
+  // Handler for Save button
+  const handleSave = () => {
+    const payload = {
+      shippingOptions,
+      specificProducts,
+      specificCollections,
+      discountMethod,
+      discountCode,
+      autoTitle,
+      minType,
+      amount,
+      minQty,
+      appliesTo,
+      purchaseType,
+      eligibility,
+      selectedSegments,
+      combos,
+      maxUses,
+      maxUsesPerCustomer,
+      startDate,
+      startTime,
+      hasEndDate,
+      endDate,
+      endTime,
+      tiers,
+    };
+    const formData = new FormData();
+    formData.append("discountType", "tier");
+    formData.append("payload", JSON.stringify(payload));
+    formData.append("intent", "tier-discount");
+    fetcher.submit(formData, { method: "post", action: parentAction });
+  };
+
   // Per-discount state for shipping discount UI
   // Use dynamic countries prop and map to flag components
   const [shippingOptions, setShippingOptions] = useState({}); // { [tierIdx_discIdx]: { exclude: false, amount: "0.00", appliesTo: "all" | "specific", countrySearch: '', selectedCountries: [] } }
@@ -70,6 +106,7 @@ export default function TierDiscount({ onBack, initialStartTime, segments = [], 
   // Form state
   const [discountMethod, setDiscountMethod] = useState("code"); // "code" or "automatic"
   const [discountCode, setDiscountCode] = useState("");
+  const [autoTitle, setAutoTitle] = useState("");
   const [minType, setMinType] = useState("amount");
   const [amount, setAmount] = useState("");
   const [minQty, setMinQty] = useState("1");
@@ -245,11 +282,13 @@ export default function TierDiscount({ onBack, initialStartTime, segments = [], 
                   </Button>
                 </InlineStack>
                 {discountMethod === "automatic" && (
-                  <Box background="bg-surface-info" padding="400" borderRadius="200">
-                    <Text as="span" color="subdued">
-                      Customers will not need a code. Discount will apply automatically if requirements are met.
-                    </Text>
-                  </Box>
+                  <TextField
+                    label="Automatic discount title"
+                    value={autoTitle}
+                    onChange={setAutoTitle}
+                    maxLength={64}
+                    helpText="Enter a title for this automatic discount. Customers will see this at checkout."
+                  />
                 )}
                 {discountMethod === "code" && (
                   <>
@@ -912,7 +951,7 @@ export default function TierDiscount({ onBack, initialStartTime, segments = [], 
             {/* Save button */}
             <Box display="flex" justifyContent="end">
 
-              <Button primary>Save</Button>
+              <Button primary onClick={handleSave} loading={fetcher.state === "submitting"}>Save</Button>
             </Box>
           </BlockStack>
         </Layout.Section>
