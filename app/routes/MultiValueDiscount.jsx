@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useFetcher } from "@remix-run/react";
 // import { useLoaderData } from "@remix-run/react";
 import * as Polaris from "@shopify/polaris";
 import { DeleteIcon } from '@shopify/polaris-icons';
@@ -22,7 +23,44 @@ const {
   Divider,
 } = Polaris;
 
-export default function MultiValueDiscount({ onBack, initialStartTime, segments = [], error, shopDomain }) {
+export default function MultiValueDiscount({ onBack, initialStartTime, segments = [], error, shopDomain, parentAction }) {
+  const fetcher = useFetcher();
+  // Form state
+  const [discountMethod, setDiscountMethod] = useState("code");
+  const [discountCode, setDiscountCode] = useState("");
+  const [autoTitle, setAutoTitle] = useState("");
+  // ...existing code...
+
+  // Handler for Save button
+  const handleSave = () => {
+    // Collect all form state into a single object
+    const payload = {
+      discountMethod,
+      discountCode,
+      appliesTo,
+      recurringOption,
+      recurringCount,
+      purchaseType,
+      discountValues,
+      eligibility,
+      selectedSegments,
+      combos,
+      maxUses,
+      maxUsesPerCustomer,
+      startDate,
+      startTime,
+      hasEndDate,
+      endDate,
+      endTime,
+      ...(discountMethod === "automatic" && { autoTitle }),
+    };
+    const formData = new FormData();
+    formData.append("discountType", "multi");
+    formData.append("payload", JSON.stringify(payload));
+    formData.append("intent", "multi-value-discount");
+    fetcher.submit(formData, { method: "post", action: parentAction });
+  };
+
   if (error) {
     return (
       <Polaris.Card>
@@ -49,14 +87,24 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
       </Polaris.Card>
     );
   }
-  // Form state
-  const [discountMethod, setDiscountMethod] = useState("code");
-  const [discountCode, setDiscountCode] = useState("");
+  // ...existing code...
   const [appliesTo, setAppliesTo] = useState("specific_collections");
   // Recurring payments for subscriptions state
   const [recurringOption, setRecurringOption] = useState('first'); // 'first', 'multiple', 'all'
   const [recurringCount, setRecurringCount] = useState('1');
   const [showChangeModal, setShowChangeModal] = useState(false);
+                    {discountMethod === "automatic" && (
+                      <Box paddingBlockStart="2">
+                        <TextField
+                          label="Automatic discount title"
+                          value={autoTitle}
+                          onChange={setAutoTitle}
+                          helpText="Enter a unique title for this automatic discount. Customers will see this at checkout."
+                          maxLength={64}
+                          requiredIndicator
+                        />
+                      </Box>
+                    )}
   const [pendingAppliesTo, setPendingAppliesTo] = useState(null);
   const [purchaseType, setPurchaseType] = useState("one-time");
   const [discountValues, setDiscountValues] = useState([
@@ -243,6 +291,18 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
                         onChange={setDiscountCode}
                         helpText="Create a URL-friendly discount code that avoids special characters. Customers will see this code in their cart and checkout."
                         maxLength={64}
+                      />
+                    </Box>
+                  )}
+                  {discountMethod === "automatic" && (
+                    <Box paddingBlockStart="2">
+                      <TextField
+                        label="Automatic discount title"
+                        value={autoTitle}
+                        onChange={setAutoTitle}
+                        helpText="Enter a unique title for this automatic discount. Customers will see this at checkout."
+                        maxLength={64}
+                        requiredIndicator
                       />
                     </Box>
                   )}
@@ -620,7 +680,7 @@ export default function MultiValueDiscount({ onBack, initialStartTime, segments 
                   )}
                 </BlockStack>
               </Card>
-              <Button primary>Save</Button>
+              <Button primary onClick={handleSave} loading={fetcher.state === "submitting"}>Save</Button>
             </Layout.Section>
             {/* Right column summary */}
             <Layout.Section variant="oneThird">

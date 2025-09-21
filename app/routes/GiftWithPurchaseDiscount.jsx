@@ -1,5 +1,7 @@
 import { useState } from "react";
 import * as Polaris from "@shopify/polaris";
+
+import { useFetcher } from "@remix-run/react";
 const {
   Page,
   Layout,
@@ -19,7 +21,41 @@ const {
 } = Polaris;
 
 
-export default function GiftWithPurchaseDiscount({ onBack, initialStartTime, segments = [], error, shopDomain }) {
+export default function GiftWithPurchaseDiscount({ onBack, initialStartTime, segments = [], error, shopDomain, parentAction }) {
+  const fetcher = useFetcher();
+  // Handler for Save button
+  const handleSave = () => {
+    const payload = {
+      discountMethod,
+      discountCode,
+      minType,
+      amount,
+      appliesTo,
+      specificProducts,
+      specificCollections,
+      purchaseType,
+      selectedGift,
+      recurringOption,
+      recurringCount,
+      eligibility,
+      selectedSegments,
+      combos,
+      maxUses,
+      maxUsesPerCustomer,
+      oneGiftPerOrder,
+      startDate,
+      startTime,
+      hasEndDate,
+      endDate,
+      endTime,
+    };
+    const formData = new FormData();
+    formData.append("discountType", "gift");
+    formData.append("payload", JSON.stringify(payload));
+    formData.append("intent", "gift-with-purchase");
+    fetcher.submit(formData, { method: "post", action: parentAction });
+  };
+
   // Form state
   const [discountMethod, setDiscountMethod] = useState("code"); // "code" or "automatic"
   const [discountCode, setDiscountCode] = useState("");
@@ -559,7 +595,7 @@ export default function GiftWithPurchaseDiscount({ onBack, initialStartTime, seg
                   )}
                 </BlockStack>
               </Card>
-              <Button primary>Save</Button>
+              <Button primary onClick={handleSave} loading={fetcher.state === "submitting"}>Save</Button>
             </Layout.Section>
             <Layout.Section variant="oneThird">
               <BlockStack gap="200">

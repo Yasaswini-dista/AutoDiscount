@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as Polaris from "@shopify/polaris";
 import { DeleteIcon, PlusCircleIcon } from '@shopify/polaris-icons';
+import { useFetcher } from "@remix-run/react";
 
 const {
   Page,
@@ -19,7 +20,43 @@ const {
   Divider,
 } = Polaris;
 
-export default function VolumeDiscount({ onBack, initialStartTime, segments = [], error, shopDomain }) {
+export default function VolumeDiscount({ onBack, initialStartTime, segments = [], error, shopDomain, parentAction }) {
+  const fetcher = useFetcher();
+  // Handler for Save button
+  const handleSave = () => {
+    const payload = {
+      discountMethod,
+      discountCode,
+      autoTitle,
+      minType,
+      amount,
+      minQty,
+      appliesTo,
+      purchaseType,
+      specificProducts,
+      specificCollections,
+      discountType,
+      discountAppliesToItems,
+      minPerVariant,
+      tierValues,
+      eligibility,
+      selectedSegments,
+      combos,
+      maxUses,
+      maxUsesPerCustomer,
+      startDate,
+      startTime,
+      hasEndDate,
+      endDate,
+      endTime,
+    };
+    const formData = new FormData();
+    formData.append("discountType", "volume");
+    formData.append("payload", JSON.stringify(payload));
+    formData.append("intent", "volume-discount");
+    fetcher.submit(formData, { method: "post", action: parentAction });
+  };
+
   // Error/empty state
   if (error) {
     return (
@@ -50,6 +87,7 @@ export default function VolumeDiscount({ onBack, initialStartTime, segments = []
   // Form state
   const [discountMethod, setDiscountMethod] = useState("code"); // "code" or "automatic"
   const [discountCode, setDiscountCode] = useState("");
+  const [autoTitle, setAutoTitle] = useState("");
   const [minType, setMinType] = useState("amount");
   const [amount, setAmount] = useState("");
   const [minQty, setMinQty] = useState("1");
@@ -125,10 +163,13 @@ export default function VolumeDiscount({ onBack, initialStartTime, segments = []
                   </InlineStack>
                   {discountMethod === "automatic" && (
                     <Box paddingBlockStart="2">
-                      <Polaris.Banner tone="info">
-                        Select a plan to create automatic discount functions.{' '}
-                        <a href="https://www.shopify.com/pricing" target="_blank" rel="noopener noreferrer">Select a plan</a>
-                      </Polaris.Banner>
+                      <TextField
+                        label="Automatic discount title"
+                        value={autoTitle}
+                        onChange={setAutoTitle}
+                        helpText="Enter a title for this automatic discount. Customers will see this at checkout."
+                        maxLength={64}
+                      />
                     </Box>
                   )}
                   {discountMethod === "code" && (
@@ -190,19 +231,23 @@ export default function VolumeDiscount({ onBack, initialStartTime, segments = []
                       />
                     </div>
                   </InlineStack>
-                  {/* Per-variant checkbox for minimum purchase amount */}
-                  {minType === "amount" && (
-                    <Box marginBlockStart="2">
-                      <Checkbox
-                        label="Set minimum required purchase amount per product variant"
-                        checked={minPerVariant}
-                        onChange={setMinPerVariant}
-                      />
-                      <Text color="subdued" variant="bodySm" style={{ marginLeft: 32 }}>
-                        If unchecked, the minimum purchase amount can include a mix of any selected product variants.
-                      </Text>
-                    </Box>
-                  )}
+                  {/* Always show per-variant checkbox, help text changes by minType */}
+                  <Box marginBlockStart="2">
+                    <Checkbox
+                      label={
+                        minType === "amount"
+                          ? "Set minimum required purchase amount per product variant"
+                          : "Set minimum required quantity per product variant"
+                      }
+                      checked={minPerVariant}
+                      onChange={setMinPerVariant}
+                    />
+                    <Text color="subdued" variant="bodySm" style={{ marginLeft: 32 }}>
+                      {minType === "amount"
+                        ? "If unchecked, the minimum purchase amount can include a mix of any selected product variants."
+                        : "If unchecked, the minimum quantity can include a mix of any selected product variants."}
+                    </Text>
+                  </Box>
                 </BlockStack>
               </Card>
               {/* Customer gets */}
@@ -593,7 +638,7 @@ export default function VolumeDiscount({ onBack, initialStartTime, segments = []
                   )}
                 </BlockStack>
               </Card>
-              <Button primary>Save</Button>
+              <Button primary onClick={handleSave} loading={fetcher.state === "submitting"}>Save</Button>
             </Layout.Section>
             {/* Right column summary */}
             <Layout.Section variant="oneThird">

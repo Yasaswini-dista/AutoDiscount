@@ -23,7 +23,7 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/discounts">Discount Functions</Link>
-        <Link to="/Segments">Customer Segments</Link>
+        <Link to="/app/promotions">Promotions</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>
