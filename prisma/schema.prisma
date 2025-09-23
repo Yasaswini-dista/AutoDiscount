@@ -1,3 +1,11 @@
+model ThemeSettings {
+  id         String   @id @default(cuid())
+  shop       String
+  themeId    String
+  jsonSchema String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 

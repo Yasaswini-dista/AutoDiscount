@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, useNavigate } from "@remix-run/react";
 import { Card, Button, TextField, Box, Page, Layout, Modal, Checkbox, Spinner } from "@shopify/polaris";
+import { Outlet, useMatches } from "@remix-run/react";
 
 // Loader to fetch available discounts using Shopify GraphQL Admin API
 export const loader = async ({ request }) => {
@@ -44,7 +45,6 @@ export const loader = async ({ request }) => {
         body: JSON.stringify({ query }),
     });
     const data = await response.json();
-    console.log("Fetched discounts:", data);
     const discounts =
         data?.data?.discountNodes?.edges
             ?.map((edge) => {
@@ -78,120 +78,61 @@ export const loader = async ({ request }) => {
 
 export default function CreatePromotion() {
     const { discounts } = useLoaderData();
-    const [showForm, setShowForm] = useState(false);
-    const [promotionTitle, setPromotionTitle] = useState("");
-    const [selectedDiscount, setSelectedDiscount] = useState("");
-    const [showDiscountDropdown, setShowDiscountDropdown] = useState(false);
-    const [modalSelectedDiscount, setModalSelectedDiscount] = useState("");
+    // TODO: Fetch promotions from DB or metafield. For now, mock list
+    const [promotions] = useState([
+      // Example: { id: 'uuid-1', title: 'Black Friday', discountId: 'gid://shopify/DiscountCodeApp/123' }
+    ]);
+    const navigate = useNavigate();
+    const navigateToNew = () => {
+      navigate("/app/promotions/new");
+    };
 
-    // Find selected discount label for display
-    const selectedDiscountObj = discounts.find(d => d.value === selectedDiscount);
-    // Find modal selected discount label for display
-    const modalSelectedDiscountObj = discounts.find(d => d.value === modalSelectedDiscount);
+    // If a nested route is active (e.g. /app/promotions/new), only render <Outlet />
+    const matches = useMatches();
+    const isNested = matches[matches.length - 1].id !== "routes/app.promotions";
+    if (isNested) {
+      return <Outlet />;
+    }
 
+    // Otherwise, render the promotions list page
     return (
-        <Page title="Create promotion">
-            <Layout>
-                <Layout.Section>
-                    {!showForm ? (
-                        <Box padding="8" display="flex" flexDirection="column" alignItems="center">
-                            <img
-                                src="https://cdn.shopify.com/shopifycloud/web/assets/v1/hand-phone.svg"
-                                alt="Create promotion"
-                                style={{ width: 120, marginBottom: 24 }}
-                            />
-                            <h2 style={{ fontWeight: 600, fontSize: 22, marginBottom: 8 }}>
-                                Create your first promotion
-                            </h2>
-                            <p style={{ marginBottom: 24 }}>
-                                Launch promotions that your customers see and understand.
-                            </p>
-                            <Button primary onClick={() => setShowForm(true)}>
-                                Create promotion
-                            </Button>
-                        </Box>
-                    ) : (
-                        <Card sectioned>
-                            <Box paddingBlockEnd="4">
-                                <TextField
-                                    label="Promotion title"
-                                    placeholder="Enter a title for your promotion"
-                                    value={promotionTitle}
-                                    onChange={setPromotionTitle}
-                                    autoComplete="off"
-                                />
-                            </Box>
-                            <Box paddingBlockEnd="4">
-                                <div style={{ border: '1px dashed #babfc3', borderRadius: 8, padding: 24, background: '#fcfcfc', minHeight: 80 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 32 }}>
-                                        {!selectedDiscountObj ? (
-                                            <Button onClick={() => {
-                                                setModalSelectedDiscount(selectedDiscount);
-                                                setShowDiscountDropdown(true);
-                                            }}>
-                                                <span style={{ fontWeight: 600, fontSize: 15 }}>+ Add discount</span>
-                                            </Button>
-                                        ) : (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                <div>
-                                                    <span style={{ fontWeight: 600 }}>{selectedDiscountObj.label}</span>
-                                                    <span style={{ color: '#6d7175', fontSize: 13, marginLeft: 8 }}>({selectedDiscountObj.type})</span>
-                                                </div>
-                                                <Button plain onClick={() => {
-                                                    setModalSelectedDiscount(selectedDiscount);
-                                                    setShowDiscountDropdown(true);
-                                                }}>
-                                                    Change
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <Modal
-                                        open={showDiscountDropdown}
-                                        onClose={() => setShowDiscountDropdown(false)}
-                                        title="Select a discount"
-                                        primaryAction={{
-                                            content: 'Save',
-                                            onAction: () => {
-                                                setSelectedDiscount(modalSelectedDiscount);
-                                                setShowDiscountDropdown(false);
-                                            },
-                                            disabled: !modalSelectedDiscount
-                                        }}
-                                        secondaryActions={[{ content: 'Cancel', onAction: () => setShowDiscountDropdown(false) }]}
-                                        large
-                                    >
-                                        <Modal.Section>
-                                            <div style={{ maxHeight: 350, overflowY: 'auto' }}>
-                                                {discounts.length ? discounts.map((discount) => (
-                                                    <div key={discount.value} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f4f6f8' }}>
-                                                        <Checkbox
-                                                            checked={modalSelectedDiscount === discount.value}
-                                                            onChange={() => setModalSelectedDiscount(discount.value)}
-                                                            label={
-                                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                                    <span style={{ fontWeight: 600 }}>{discount.label} <span style={{ color: '#008060', fontWeight: 400, fontSize: 13, marginLeft: 8 }}>{discount.status === 'ACTIVE' ? 'Active' : discount.status}</span></span>
-                                                                    <span style={{ fontSize: 13, color: '#6d7175' }}>{discount.type}</span>
-                                                                </div>
-                                                            }
-                                                            disabled={false}
-                                                        />
-                                                    </div>
-                                                )) : (
-                                                    <div style={{ color: '#999' }}>No discounts found</div>
-                                                )}
-                                            </div>
-                                        </Modal.Section>
-                                    </Modal>
-                                </div>
-                            </Box>
-                            <Button primary disabled={!promotionTitle || !selectedDiscount}>
-                                Save promotion
-                            </Button>
-                        </Card>
-                    )}
-                </Layout.Section>
-            </Layout>
-        </Page>
+      <Page title="Promotions">
+        <Layout>
+          <Layout.Section>
+            <Box padding="8" display="flex" flexDirection="column" alignItems="center">
+              <img
+                src="https://cdn.shopify.com/shopifycloud/web/assets/v1/hand-phone.svg"
+                alt="Create promotion"
+                style={{ width: 120, marginBottom: 24 }}
+              />
+              <h2 style={{ fontWeight: 600, fontSize: 22, marginBottom: 8 }}>
+                Promotions
+              </h2>
+              <p style={{ marginBottom: 24 }}>
+                Launch promotions that your customers see and understand.
+              </p>
+              <Button primary onClick={navigateToNew}>
+                Create promotion
+              </Button>
+            </Box>
+            <Box padding="8" display="flex" flexDirection="column" alignItems="center">
+              {promotions.length === 0 ? (
+                <div style={{ color: '#999', marginTop: 24 }}>No promotions found</div>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0, marginTop: 24, width: '100%', maxWidth: 500 }}>
+                  {promotions.map((promo) => (
+                    <li key={promo.id} style={{ marginBottom: 16 }}>
+                      <a href={`/app/promotions/${promo.id}`} style={{ fontWeight: 600, fontSize: 16, textDecoration: 'none', color: '#005fa3' }}>
+                        {promo.title}
+                      </a>
+                      <span style={{ color: '#6d7175', fontSize: 13, marginLeft: 8 }}>({promo.discountId})</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Box>
+          </Layout.Section>
+        </Layout>
+      </Page>
     );
 }

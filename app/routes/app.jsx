@@ -24,6 +24,7 @@ export default function App() {
         </Link>
         <Link to="/app/discounts">Discount Functions</Link>
         <Link to="/app/promotions">Promotions</Link>
+        <Link to="/app/settings">Settings</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>
