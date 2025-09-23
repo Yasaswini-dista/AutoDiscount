@@ -523,8 +523,6 @@ export const loader = async ({ request }) => {
       name: c.description || c.name,
     }));
 
-    console.log('segments',segments);
-
     // Fetch discounts created by this app
     const discRes = await fetch(endpoint, {
       method: "POST",
@@ -543,7 +541,6 @@ export const loader = async ({ request }) => {
       }))
       .filter(d => d.__typename === "DiscountCodeApp" || d.__typename === "DiscountAutomaticApp");
 
-    console.log("[DISCOUNTS LOADER] App discounts by functionId:", JSON.stringify(discounts, null, 2));
 
     return json({ segments, countries, discounts, error: null, shop });
   } catch (err) {
