@@ -1,0 +1,14 @@
+<!-- blocks/auto-discount-block.liquid -->
+<script>
+  window.AUTO_DISCOUNT_SCHEMA = JSON.parse({{ shop.metafields.auto-discounts.schema-config.value | json }});
+  window.money_format = '{{ shop.money_with_currency_format }}';
+</script>
+<script src="{{ 'auto-discount.js' | asset_url }}" defer="defer"></script>
+
+{% schema %}
+{
+	"name": "Auto Discount Script",
+	"target": "body",
+	"settings": []
+}
+{% endschema %}
