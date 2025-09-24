@@ -64,38 +64,53 @@ export const action = async ({ request }) => {
     console.log("Created new themeSettings for shop:", shop, "themeId:", themeId);
   }
 
-  // Upload JSON as asset to selected theme using direct REST API call (PUT, Accept header, debug logs)
-  if (themeId && jsonSchema) {
-    const shopDomain = shop;
-    // Extract numeric theme ID from GID if needed
-    let numericThemeId = themeId;
-    const match = /\/(\d+)$/.exec(themeId);
-    if (match) {
-      numericThemeId = match[1];
-    }
-
-    const url = `https://${shopDomain}/admin/api/2023-10/themes/${numericThemeId}/assets.json`;
-    const assetBody = {
-      asset: {
-        key: "assets/auto-discount-pricing-schema.json",
-        value: typeof jsonSchema === 'string' ? jsonSchema : JSON.stringify(jsonSchema),
-      },
-    };
-    console.log("Uploading asset to Shopify:", JSON.stringify(assetBody), "Theme ID used:", numericThemeId);
-    const response = await fetch(url, {
-      method: "PUT",
+  // Save JSON schema to shop metafield: auto-discounts.schema-config using GraphQL
+  if (jsonSchema) {
+    // 1. Fetch shop GID
+    const shopIdQuery = `#graphql\n{ shop { id } }`;
+    const shopIdResp = await fetch(`https://${shop}/admin/api/2023-10/graphql.json`, {
+      method: "POST",
       headers: {
         "X-Shopify-Access-Token": accessToken,
         "Content-Type": "application/json",
         "Accept": "application/json",
       },
-      body: JSON.stringify(assetBody),
+      body: JSON.stringify({ query: shopIdQuery }),
     });
-    const responseText = await response.text();
-    if (response.ok) {
-      console.log("Asset uploaded successfully to theme:", numericThemeId, responseText);
+    const shopIdJson = await shopIdResp.json();
+    const shopGid = shopIdJson?.data?.shop?.id;
+    if (!shopGid) {
+      console.error("Could not fetch shop GID for metafield save", shopIdJson);
     } else {
-      console.error("Asset upload failed:", response.status, responseText);
+      const metafieldValue = typeof jsonSchema === 'string' ? jsonSchema : JSON.stringify(jsonSchema);
+      const mutation = `#graphql\nmutation metafieldSet($metafields: [MetafieldsSetInput!]!) {\n  metafieldsSet(metafields: $metafields) {\n    metafields {\n      key\n      namespace\n      value\n      type\n      id\n    }\n    userErrors {\n      field\n      message\n    }\n  }\n}`;
+      const variables = {
+        metafields: [
+          {
+            namespace: "auto-discounts",
+            key: "schema-config",
+            type: "multi_line_text_field",
+            value: metafieldValue,
+            ownerId: shopGid
+          }
+        ]
+      };
+      console.log("Saving schema to metafield via GraphQL:", variables);
+      const response = await fetch(`https://${shop}/admin/api/2023-10/graphql.json`, {
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: JSON.stringify({ query: mutation, variables }),
+      });
+      const responseText = await response.text();
+      if (response.ok) {
+        console.log("Metafield saved successfully via GraphQL", responseText);
+      } else {
+        console.error("Metafield save failed via GraphQL:", response.status, responseText);
+      }
     }
   }
 
